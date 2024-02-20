@@ -96,10 +96,10 @@ u_int64_t last, lastTime;  // These timing variables work with System.millis()
 
 //  INSTANTIATIONS  //
 void watchDogISR();
-void MQTT_connect(int* valid);
+void MQTT_connect(bool* valid);
 bool MQTT_ping();
 void MQTT_publish(int relaySample, int relayState, int switchState, int VOC, bool dataValid, bool eveningRun);
-void MQTT_subscribe(int* temp, int* hum, int* volit, int* carbon, int* resetin);
+void MQTT_subscribe(float* temp, int* hum, int* volit, int* carbon, bool* resetin);
 
 
 Timer watchDogTimer(WDT_Half_Time, watchDogISR);  //  Instantiate a Timer interrupt with period WDT_Half_Time and interrupt service routinte watchDogISR
@@ -285,7 +285,7 @@ void loop() {
 //          MQTT_CONNECT
 //////////////////////////////////////////////////////////////
 // Function to connect and reconnect as necessary to the MQTT server.
-void MQTT_connect(int* valid) {
+void MQTT_connect(bool* valid) {
   int8_t ret;
 
   // Stop if already connected.
@@ -343,7 +343,7 @@ void MQTT_publish(int relaySample, int relayState, int switchState, int VOC, boo
 ///////////////////////////////////////////////////////////////
 //          MQTT_SUBSCRIBE
 //////////////////////////////////////////////////////////////
-void MQTT_subscribe(int* temp, int* hum, int* volit, int* carbon, int* resetin){
+void MQTT_subscribe(float* temp, int* hum, int* volit, int* carbon, bool* resetin){
   // this is our 'wait for incoming subscription packets' busy subloop 
   Adafruit_MQTT_Subscribe *subscription;
   while ((subscription = mqtt.readSubscription(10))) {
@@ -369,7 +369,7 @@ void MQTT_subscribe(int* temp, int* hum, int* volit, int* carbon, int* resetin){
     }
 
     if (subscription == &theResetObject) {
-      *resetin = atof((char *)theResetObject.lastread);
+      *resetin = (atoi((char *)theResetObject.lastread)==1);
       // Serial.printf("Received %i from Adafruit.io feed theResetObject \n",CO2);
     }
   }
