@@ -333,8 +333,8 @@ void MQTT_publish(int relaySample, int relayState, int switchState, int VOC, boo
       mqttObj2.publish(relayState);
       mqttObj3.publish(switchState);
       mqttObj4.publish(VOC);
-      mqttObj3.publish(dataValid);
-      mqttObj4.publish(eveningRun);
+      mqttObj5.publish(dataValid);
+      mqttObj6.publish(eveningRun);
       // Serial.printf("Publishing %0.2f \n",*value); 
   }
 }
@@ -369,7 +369,7 @@ void MQTT_subscribe(float* temp, int* hum, int* volit, int* carbon, bool* reseti
     }
 
     if (subscription == &theResetObject) {
-      *resetin = (atoi((char *)theResetObject.lastread)==1);
+      *resetin = ((atoi((char *)theResetObject.lastread))==1);
       // Serial.printf("Received %i from Adafruit.io feed theResetObject \n",CO2);
     }
   }
