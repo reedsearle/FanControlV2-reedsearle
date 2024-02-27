@@ -80,7 +80,7 @@ int   VOC         = -1; // VOC variable set to Invalid Data
 int   CO2         = -1; // CO2 variable set to Invalid Data
 
 bool dataValid;   //  Flag for MQTT subscription data receiving on all four subscriptions
-bool* eveningRun;  //  Flag for nightly high speed fan
+bool eveningRun;  //  Flag for nightly high speed fan
 
 //  Time & timing Variables
 u_int64_t last, lastTime;  // These timing variables work with System.millis()
@@ -98,7 +98,7 @@ void MQTT_connect(bool* valid);
 bool MQTT_ping();
 void MQTT_publish(int relaySample, int relayState, bool switchState, int VOC, bool dataValid, bool eveningRun);
 void MQTT_subscribe(float* temp, int* hum, int* volit, int* carbon, bool* resetin);
-void fanControl(int FAN_CTL_OUT_PIN, int* hum, int* volit, bool dataValid, bool* eveningRun);
+void fanControl(int FAN_CTL_OUT_PIN, int hum, int volit, bool dataValid, bool* eveningRun);
 void blinkD7(int blinkNum);
 
 Timer watchDogTimer(WDT_Half_Time, watchDogISR);  //  Instantiate a Timer interrupt with period WDT_Half_Time and interrupt service routinte watchDogISR
@@ -148,7 +148,7 @@ void setup() {
   mqtt.subscribe(&theResetObject);
 
   dataValid  = FALSE;  //  Initialize dataValid flag to FALSE
-  *eveningRun = FALSE;  //  Initialize eveningRun flag to FALSE
+  eveningRun = FALSE;  //  Initialize eveningRun flag to FALSE
 
 
   watchDogTimer.start();
@@ -162,10 +162,6 @@ void setup() {
 //        LOOP
 /////////////////////////////////////////////////////////
 void loop() {
-  // This is temporary
-
-  // digitalWrite(D7_LED_PIN, WDT_ST_State);
-
   if(dataValid) blinkD7(1);
   else blinkD7(3);
 
@@ -180,30 +176,28 @@ void loop() {
   MQTT_ping();
 
   // publish to cloud every 30 seconds
-  // if((System.millis()-lastTime > 30000)) {
-  if((millis()-lastTime > 30000)) {
-    MQTT_publish(relaySample, relayState, switchState, VOC, dataValid, *eveningRun);
+  if((System.millis()-lastTime > 30000)) {
+    MQTT_publish(relaySample, relayState, switchState, VOC, dataValid, eveningRun);
     lastTime = millis();
   }
 
   // this is our 'wait for incoming subscription packets' busy subloop
   // Check for change in the four variables from the MQTT broker
   MQTT_subscribe(&temperature, &humidity, &VOC, &CO2, &resetMQTT);
+
   //  Check for invalid data as indicated by a value of -1
   if (temperature == -1 || humidity == -1 || VOC == -1 || CO2 == -1) {
     dataValid = FALSE;
     watchDogTimer.stop();
-    Serial.printf("Watchdog stopped\n");
   }  else if (!dataValid) {  // Data just turned valid
     dataValid = TRUE;
     // digitalWrite(WDT_PBRSTN_PIN, LOW);  // Force watchdog to stop.
     watchDogTimer.start();              // Start watchdog keep-alive signal
-    Serial.printf("Data Valid \n");
   }
 
 
   // This is the fan control function call
-  fanControl(FAN_CTL_OUT_PIN, &humidity, &VOC, dataValid, eveningRun);
+  fanControl(FAN_CTL_OUT_PIN, humidity, VOC, dataValid, &eveningRun);
 
 ////////////////////////////////////////////////////////////////////////////
 //  relaySample is the voltage at the output of the relay, a direct analog for fan speed
@@ -287,7 +281,6 @@ void MQTT_publish(int relaySample, int relayState, bool switchState, int VOC, bo
       mqttObj4.publish(VOC);
       mqttObj5.publish(dataValid);
       mqttObj6.publish(eveningRun);
-      Serial.printf("Publishing  \n"); 
   }
 }
 
@@ -301,30 +294,20 @@ void MQTT_subscribe(float* temp, int* hum, int* volit, int* carbon, bool* reseti
   while ((subscription = mqtt.readSubscription(10))) {
     if (subscription == &theTemperatureObject) {
       *temp = atof((char *)theTemperatureObject.lastread);
-      Serial.printf("Received %0.1f from Adafruit.io feed theTemperatureObject \n",*temp);
     }
-
     if (subscription == &theHumidityObject) {
       *hum = atof((char *)theHumidityObject.lastread);
-      // Serial.printf("Received %i from Adafruit.io feed theHumidityObject \n",*hum);
     }
-
     if (subscription == &theTVOCObject) {
       *volit = atof((char *)theTVOCObject.lastread);
-      // Serial.printf("Received %i from Adafruit.io feed theTVOCObject \n",*volit);
     }
-
     if (subscription == &theCO2Object) {
       *carbon = atof((char *)theCO2Object.lastread);
-      // Serial.printf("Received %i from Adafruit.io feed theCO2Object \n",*carbon);
     }
-
     if (subscription == &theResetObject) {
       *resetin = ((atoi((char *)theResetObject.lastread))==1);
-      // Serial.printf("Received %s from Adafruit.io feed theResetObject \n",((*resetin)?"true":"false"));
     }
   }
-
 }
 
 
@@ -337,7 +320,7 @@ void MQTT_subscribe(float* temp, int* hum, int* volit, int* carbon, bool* reseti
   //  are initialized to -1 to show they are invalid.  Once the MQTT broker
   //  is online, the data will be valid and fan control may begin.
   ////////////////////////////////////////////////////////////////////
-void fanControl(int FAN_CTL_OUT_PIN, int* hum, int* volit, bool dataValid, bool* eveRun) {
+void fanControl(int FAN_CTL_OUT_PIN, int hum, int volit, bool dataValid, bool* eveningRun) {
 
   String    dateTime, timeOnly, hourOnly;   
   const int  FAN_OFF    = 0;   // 0.0 on manual fan dial
@@ -347,22 +330,15 @@ void fanControl(int FAN_CTL_OUT_PIN, int* hum, int* volit, bool dataValid, bool*
 
   const int VOC_HI_LIMIT      = 350;  // VOC limit above which the fan will turn on - from Clint Wolf's Code
   const int HUMIDITY_LOW_LIMIT = 20;  //  Humidity limit to determine fan speed - from Clint Wolf's Code
-
-  String eveningString;
-  static bool eveningRun = FALSE;
-
+  int debug=3, debugOld=0;
   //  Setup TIME
-  Time.zone(-6);                                         //  Set time zone to MDT -6 from UTC
+  Time.zone(+1);                                         //  Set time zone to MDT -6 from UTC
   Particle.syncTime();
   dateTime = Time.timeStr();                          //  get current value of date and time
   timeOnly = dateTime.substring(11,16);               //  Extract value of time from dateTime
   hourOnly = dateTime.substring(11,13);               //  Extract value of time from dateTime
-    // Serial.printf("Time is: %s \n", timeOnly.c_str());
     // Serial.printf("Hour is: %s \n", hourOnly.c_str());
 
-    if (!eveningRun) eveningString = "false";
-    else eveningString = "true";
-    Serial.printf("eveningRun: %s \n", eveningString);
 
   //////////////////////////////////////////////////////////////////////////
   //  Fan control has two distinct phases: Evening phase where the fan is
@@ -374,31 +350,41 @@ void fanControl(int FAN_CTL_OUT_PIN, int* hum, int* volit, bool dataValid, bool*
 
   // Evening fan run to remove latent VOCs
   // Supercedes all other requirements
-  if (hourOnly == "20" && !eveningRun) {
+  if (hourOnly == "20" && !(*eveningRun)) {
     analogWrite(FAN_CTL_OUT_PIN, FAN_HIGH);  
     Serial.printf("Evening run started at %s \n", timeOnly.c_str());
-    eveningRun = TRUE;
-  } else if (hourOnly != "20" && eveningRun) {
+    *eveningRun = TRUE;
+  } else if (hourOnly != "20" && *eveningRun) {
     analogWrite(FAN_CTL_OUT_PIN, FAN_OFF);  
     Serial.printf("Evening run ended at %s \n", timeOnly.c_str());
-    eveningRun = FALSE;
+    *eveningRun = FALSE;
   }
 
   // Fan is not running and VOC limit exceeded
   // - Inactive during evening run of fan
-  if (*volit > VOC_HI_LIMIT && dataValid && !eveningRun) {
-    if (*hum > HUMIDITY_LOW_LIMIT) {
+  if (volit > VOC_HI_LIMIT && dataValid && !(*eveningRun)) {
+    if (hum > HUMIDITY_LOW_LIMIT) {
       analogWrite(FAN_CTL_OUT_PIN, FAN_NORMAL);  // Humidity is high so use higher fan speed
-      Serial.printf("Fan Normal, VOC=%i, Humidity=%i \n", *volit, *hum);
+      debug = 1;
     } else {
       analogWrite(FAN_CTL_OUT_PIN, FAN_IDLE);  // Humidity is low so use lower fan speed
-      Serial.printf("Fan Idle, VOC=%i, Humidity=%i \n", *volit, *hum);
+      debug = 2;
     }
-  } else if (*volit <= VOC_HI_LIMIT && !eveningRun) {
+  } else if (volit <= VOC_HI_LIMIT && !(*eveningRun)) {
     analogWrite(FAN_CTL_OUT_PIN, FAN_OFF);  // VOCs have dropped below threshold, turn fan off
-    Serial.printf("Fan off \n");
+      debug = 3;
   }
-  *eveRun = eveningRun;
+
+switch (debug){
+  case 1:
+  if(debugOld != debug) Serial.printf("Fan Normal\n"); debugOld = debug; break;
+  case 2:
+  if(debugOld != debug) Serial.printf("Fan High\n"); debugOld = debug; break;
+  case 3:
+  if(debugOld != debug) Serial.printf("Fan Off\n"); debugOld = debug; break;
+  }
+  
+
 }
 
 /////////////////////////////////////////////
