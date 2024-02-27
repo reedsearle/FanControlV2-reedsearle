@@ -98,7 +98,7 @@ void MQTT_connect(bool* valid);
 bool MQTT_ping();
 void MQTT_publish(int relaySample, int relayState, bool switchState, int VOC, bool dataValid, bool eveningRun);
 void MQTT_subscribe(float* temp, int* hum, int* volit, int* carbon, bool* resetin);
-void fanControl(int FAN_CTL_OUT_PIN, int* hum, int* volit, bool* dataValid, bool* eveningRun);
+void fanControl(int FAN_CTL_OUT_PIN, int* hum, int* volit, bool dataValid, bool* eveningRun);
 void blinkD7(int blinkNum);
 
 Timer watchDogTimer(WDT_Half_Time, watchDogISR);  //  Instantiate a Timer interrupt with period WDT_Half_Time and interrupt service routinte watchDogISR
@@ -203,7 +203,7 @@ void loop() {
 
 
   // This is the fan control function call
-  fanControl(FAN_CTL_OUT_PIN, &humidity, &VOC, &dataValid, eveningRun);
+  fanControl(FAN_CTL_OUT_PIN, &humidity, &VOC, dataValid, eveningRun);
 
 ////////////////////////////////////////////////////////////////////////////
 //  relaySample is the voltage at the output of the relay, a direct analog for fan speed
@@ -337,7 +337,7 @@ void MQTT_subscribe(float* temp, int* hum, int* volit, int* carbon, bool* reseti
   //  are initialized to -1 to show they are invalid.  Once the MQTT broker
   //  is online, the data will be valid and fan control may begin.
   ////////////////////////////////////////////////////////////////////
-void fanControl(int FAN_CTL_OUT_PIN, int* hum, int* volit, bool* dataValid, bool* eveningRun) {
+void fanControl(int FAN_CTL_OUT_PIN, int* hum, int* volit, bool dataValid, bool* eveRun) {
 
   String    dateTime, timeOnly, hourOnly;   
   const int  FAN_OFF    = 0;   // 0.0 on manual fan dial
@@ -349,6 +349,7 @@ void fanControl(int FAN_CTL_OUT_PIN, int* hum, int* volit, bool* dataValid, bool
   const int HUMIDITY_LOW_LIMIT = 20;  //  Humidity limit to determine fan speed - from Clint Wolf's Code
 
   String eveningString;
+  static bool eveningRun = FALSE;
 
   //  Setup TIME
   Time.zone(-6);                                         //  Set time zone to MDT -6 from UTC
@@ -359,7 +360,7 @@ void fanControl(int FAN_CTL_OUT_PIN, int* hum, int* volit, bool* dataValid, bool
     // Serial.printf("Time is: %s \n", timeOnly.c_str());
     // Serial.printf("Hour is: %s \n", hourOnly.c_str());
 
-    if (!*eveningRun) eveningString = "false";
+    if (!eveningRun) eveningString = "false";
     else eveningString = "true";
     Serial.printf("eveningRun: %s \n", eveningString);
 
@@ -373,19 +374,19 @@ void fanControl(int FAN_CTL_OUT_PIN, int* hum, int* volit, bool* dataValid, bool
 
   // Evening fan run to remove latent VOCs
   // Supercedes all other requirements
-  if (hourOnly == "20" && !*eveningRun) {
+  if (hourOnly == "20" && !eveningRun) {
     analogWrite(FAN_CTL_OUT_PIN, FAN_HIGH);  
     Serial.printf("Evening run started at %s \n", timeOnly.c_str());
-    *eveningRun = TRUE;
-  } else if (hourOnly != "20" && *eveningRun) {
+    eveningRun = TRUE;
+  } else if (hourOnly != "20" && eveningRun) {
     analogWrite(FAN_CTL_OUT_PIN, FAN_OFF);  
     Serial.printf("Evening run ended at %s \n", timeOnly.c_str());
-    *eveningRun = FALSE;
+    eveningRun = FALSE;
   }
 
   // Fan is not running and VOC limit exceeded
   // - Inactive during evening run of fan
-  if (*volit > VOC_HI_LIMIT && *dataValid && !*eveningRun) {
+  if (*volit > VOC_HI_LIMIT && dataValid && !eveningRun) {
     if (*hum > HUMIDITY_LOW_LIMIT) {
       analogWrite(FAN_CTL_OUT_PIN, FAN_NORMAL);  // Humidity is high so use higher fan speed
       Serial.printf("Fan Normal, VOC=%i, Humidity=%i \n", *volit, *hum);
@@ -393,10 +394,11 @@ void fanControl(int FAN_CTL_OUT_PIN, int* hum, int* volit, bool* dataValid, bool
       analogWrite(FAN_CTL_OUT_PIN, FAN_IDLE);  // Humidity is low so use lower fan speed
       Serial.printf("Fan Idle, VOC=%i, Humidity=%i \n", *volit, *hum);
     }
-  } else if (*volit <= VOC_HI_LIMIT && !*eveningRun) {
+  } else if (*volit <= VOC_HI_LIMIT && !eveningRun) {
     analogWrite(FAN_CTL_OUT_PIN, FAN_OFF);  // VOCs have dropped below threshold, turn fan off
     Serial.printf("Fan off \n");
   }
+  *eveRun = eveningRun;
 }
 
 /////////////////////////////////////////////
