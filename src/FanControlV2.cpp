@@ -14,8 +14,8 @@
 
 
 // Let Device OS manage the connection to the Particle Cloud
-// SYSTEM_MODE(AUTOMATIC);
-SYSTEM_MODE(MANUAL);// for testing at home
+SYSTEM_MODE(AUTOMATIC);
+// SYSTEM_MODE(MANUAL);// for testing at home
 
 // Run the application and system concurrently in separate threads
 SYSTEM_THREAD(ENABLED);
@@ -136,9 +136,9 @@ void setup() {
 
  
   // Connect to WiFi without going to Particle Cloud
-  WiFi.on();
-  WiFi.clearCredentials();
-  WiFi.setCredentials("CNMGuest");
+  // WiFi.on();
+  // WiFi.clearCredentials();
+  // WiFi.setCredentials("CNM_GUEST");
   WiFi.connect();
   while(WiFi.connecting()) {
     Serial.printf(".");
@@ -383,13 +383,13 @@ void fanControl(int FAN_CTL_OUT_PIN, int hum, int volit, bool dataValid, bool* e
       debugOld = debug; 
       switch (debug){
         case 1:
-          Serial.printf("1. Fan Normal\n"); 
+          Serial.printf("1. Fan Normal started at %s\nVOC: %i\nHumidity: %i\n\n", timeOnly.c_str(), volit, hum); 
           break;
         case 2:
-          Serial.printf("2. Fan High\n"); 
+          Serial.printf("2. Fan High started at %s\nVOC: %i\nHumidity: %i\n\n", timeOnly.c_str(), volit, hum); 
           break;
         case 3:
-          Serial.printf("3. Fan Off\n"); 
+          Serial.printf("3. Fan Off at %s \nVOC: %i\nHumidity: %i\n\n", timeOnly.c_str(), volit, hum); 
           break;
         }
     }
