@@ -14,14 +14,15 @@
 
 
 // Let Device OS manage the connection to the Particle Cloud
-SYSTEM_MODE(AUTOMATIC);
+// SYSTEM_MODE(AUTOMATIC);
+SYSTEM_MODE(MANUAL);// for testing at home
 
 // Run the application and system concurrently in separate threads
 SYSTEM_THREAD(ENABLED);
 
 // Show system, cloud connectivity, and application logs over USB
 // View logs with CLI using 'particle serial monitor --follow'
-SerialLogHandler logHandler(LOG_LEVEL_INFO);
+SerialLogHandler logHandler(LOG_LEVEL_WARN);
 
 /************ Global State (you don't need to change this!) ***   ***************/ 
 TCPClient TheClient; 
@@ -135,9 +136,12 @@ void setup() {
 
  
   // Connect to WiFi without going to Particle Cloud
+  WiFi.on();
+  WiFi.clearCredentials();
+  WiFi.setCredentials("CNMGuest");
   WiFi.connect();
   while(WiFi.connecting()) {
-    // Serial.printf(".");
+    Serial.printf(".");
   }
 
   // Setup MQTT subscription Century Signs Environmental Data.
@@ -330,9 +334,9 @@ void fanControl(int FAN_CTL_OUT_PIN, int hum, int volit, bool dataValid, bool* e
 
   const int VOC_HI_LIMIT      = 350;  // VOC limit above which the fan will turn on - from Clint Wolf's Code
   const int HUMIDITY_LOW_LIMIT = 20;  //  Humidity limit to determine fan speed - from Clint Wolf's Code
-  int debug=3, debugOld=0;
+  static int debug=3, debugOld=0;
   //  Setup TIME
-  Time.zone(+1);                                         //  Set time zone to MDT -6 from UTC
+  Time.zone(-7);                                         //  Set time zone to MDT -6 from UTC
   Particle.syncTime();
   dateTime = Time.timeStr();                          //  get current value of date and time
   timeOnly = dateTime.substring(11,16);               //  Extract value of time from dateTime
@@ -375,14 +379,20 @@ void fanControl(int FAN_CTL_OUT_PIN, int hum, int volit, bool dataValid, bool* e
       debug = 3;
   }
 
-switch (debug){
-  case 1:
-  if(debugOld != debug) Serial.printf("Fan Normal\n"); debugOld = debug; break;
-  case 2:
-  if(debugOld != debug) Serial.printf("Fan High\n"); debugOld = debug; break;
-  case 3:
-  if(debugOld != debug) Serial.printf("Fan Off\n"); debugOld = debug; break;
-  }
+    if(debugOld != debug) {
+      debugOld = debug; 
+      switch (debug){
+        case 1:
+          Serial.printf("1. Fan Normal\n"); 
+          break;
+        case 2:
+          Serial.printf("2. Fan High\n"); 
+          break;
+        case 3:
+          Serial.printf("3. Fan Off\n"); 
+          break;
+        }
+    }
   
 
 }
