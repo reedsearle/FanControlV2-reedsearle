@@ -38,16 +38,27 @@ Adafruit_MQTT_Publish   mqttObj3 = Adafruit_MQTT_Publish  (&mqtt, AIO_USERNAME "
 Adafruit_MQTT_Publish   mqttObj4 = Adafruit_MQTT_Publish  (&mqtt, AIO_USERNAME "/feeds/signcompany-VOCReturn");
 Adafruit_MQTT_Publish   mqttObj5 = Adafruit_MQTT_Publish  (&mqtt, AIO_USERNAME "/feeds/signcompany-dataValid");
 Adafruit_MQTT_Publish   mqttObj6 = Adafruit_MQTT_Publish  (&mqtt, AIO_USERNAME "/feeds/signcompany-eveningRun");
+Adafruit_MQTT_Publish   mqttObj7 = Adafruit_MQTT_Publish  (&mqtt, AIO_USERNAME "/feeds/signcompany-fanSpeed");
+Adafruit_MQTT_Publish   mqttObj8 = Adafruit_MQTT_Publish  (&mqtt, AIO_USERNAME "/feeds/signcompany-dateTime");
 
 
-Adafruit_MQTT_Subscribe theTemperatureObject = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-temperature");
-Adafruit_MQTT_Subscribe theHumidityObject    = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-humidity");
-Adafruit_MQTT_Subscribe theTVOCObject        = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-tvoc");
-Adafruit_MQTT_Subscribe theCO2Object         = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-eco2");
-Adafruit_MQTT_Subscribe theResetObject       = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-reset");
+// Adafruit_MQTT_Subscribe theTemperatureObject = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-temperature");
+// Adafruit_MQTT_Subscribe theHumidityObject    = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-humidity");
+// Adafruit_MQTT_Subscribe theTVOCObject        = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-tvoc");
+// Adafruit_MQTT_Subscribe theCO2Object         = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-eco2");
+// Adafruit_MQTT_Subscribe theResetObject       = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-reset");
+
+Adafruit_MQTT_Subscribe theTemperatureObject = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/test-temperature");
+Adafruit_MQTT_Subscribe theHumidityObject    = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/test-humidity");
+Adafruit_MQTT_Subscribe theTVOCObject        = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/test-tvoc");
+Adafruit_MQTT_Subscribe theCO2Object         = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/test-eco2");
+Adafruit_MQTT_Subscribe theResetObject       = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/test-reset");
 
 
 /************Declare Variables*************/
+const int MILLIS_PER_DAY = 1000*60*60*24;
+const int PUBLISH_TIME = 30000;
+const int INVALID = -1;
 
 const int RELAY_PIN        = A0; // Input of the relay sampler
 const int RELAY_STATE_PIN  = A1; // State of the relay; Manual, Auto, Floating
@@ -75,16 +86,17 @@ int fanCount;
 
 bool firstRead;  //  indicator of the first time the subscription has been read since the device turned on
 
-float temperature = -1; // temperature variable set to Invalid Data
-int   humidity    = -1; // humidity variable set to Invalid Data
-int   VOC         = -1; // VOC variable set to Invalid Data
-int   CO2         = -1; // CO2 variable set to Invalid Data
+float temperature = INVALID; // temperature variable set to Invalid Data
+int   humidity    = INVALID; // humidity variable set to Invalid Data
+int   VOC         = INVALID; // VOC variable set to Invalid Data
+int   CO2         = INVALID; // CO2 variable set to Invalid Data
 
 bool dataValid;   //  Flag for MQTT subscription data receiving on all four subscriptions
 bool eveningRun;  //  Flag for nightly high speed fan
 
 //  Time & timing Variables
 u_int64_t last, lastTime;  // These timing variables work with System.millis()
+String    dateTime;   
 
 //  Sample Variables
 int relaySample;  //  Value of the output of the relay
@@ -92,14 +104,16 @@ int relayState;   //  Currrent state of the relay; manual, auto, or floating(BAD
 int switchState;  //  Current selected position of the manual/automatic switch;
 int wdtResetnIn;  //  Current reset state of the Watch Dog Timer, DS1232 ACTIVE LOW
 bool resetMQTT;   // Forced reset from dashboard through MQTT broker
+int fanSpeed;     // Integer value of fan speed sent to MQTT
 
 //  INSTANTIATIONS  //
 void watchDogISR();
 void MQTT_connect(bool* valid);
-bool MQTT_ping();
-void MQTT_publish(int relaySample, int relayState, bool switchState, int VOC, bool dataValid, bool eveningRun);
+bool MQTT_ping(String dateTime);
+void MQTT_publish(int relaySample, int relayState, int switchState, int VOC, 
+                    bool dataValid, bool eveningRun, int fanSpeed, String dateTime);
 void MQTT_subscribe(float* temp, int* hum, int* volit, int* carbon, bool* resetin);
-void fanControl(int FAN_CTL_OUT_PIN, int hum, int volit, bool dataValid, bool* eveningRun);
+int  fanControl(String dateTime, int hum, int volit, bool dataValid, bool* eveningRun);
 void blinkD7(int blinkNum);
 
 Timer watchDogTimer(WDT_Half_Time, watchDogISR);  //  Instantiate a Timer interrupt with period WDT_Half_Time and interrupt service routinte watchDogISR
@@ -154,10 +168,14 @@ void setup() {
   dataValid  = FALSE;  //  Initialize dataValid flag to FALSE
   eveningRun = FALSE;  //  Initialize eveningRun flag to FALSE
 
+  //  Setup TIME
+  Particle.connect();
+  Time.zone(-6);   //  Set time zone to MST -6 from UTC
+  Particle.syncTime();
 
   watchDogTimer.start();
+  last     = millis();
   lastTime = millis();
-  Particle.connect();
 
 } // setup
 
@@ -166,22 +184,30 @@ void setup() {
 //        LOOP
 /////////////////////////////////////////////////////////
 void loop() {
+  //  Sync TIME once per day
+  if((millis() - last) > MILLIS_PER_DAY) {
+    Particle.syncTime();
+  }
+  dateTime = Time.timeStr();                          //  get current value of date and time
+
+  //  D7 Blink codes.  Add more as required
   if(dataValid) blinkD7(1);
   else blinkD7(3);
 
   // Read state of input pins
-  switchState = digitalRead(SWITCH_STATE_PIN);
+  switchState = analogRead(SWITCH_STATE_PIN);
   relayState  = analogRead(RELAY_STATE_PIN);
   relaySample = analogRead(RELAY_PIN);
+  wdtResetnIn = digitalRead(WDT_RSTN_PIN); 
 
   /*  MQTT Function Block*/
 // Validate connected to MQTT Broker
   MQTT_connect(&dataValid); // Check connection.  Trip dataValid flag if connection lost
-  MQTT_ping();
+  MQTT_ping(dateTime);
 
   // publish to cloud every 30 seconds
-  if((System.millis()-lastTime > 30000)) {
-    MQTT_publish(relaySample, relayState, switchState, VOC, dataValid, eveningRun);
+  if((System.millis()-lastTime > PUBLISH_TIME)) {
+    MQTT_publish(relaySample, relayState, switchState, VOC, dataValid, eveningRun, fanSpeed, dateTime);
     lastTime = millis();
   }
 
@@ -190,36 +216,22 @@ void loop() {
   MQTT_subscribe(&temperature, &humidity, &VOC, &CO2, &resetMQTT);
 
   //  Check for invalid data as indicated by a value of -1
-  if (temperature == -1 || humidity == -1 || VOC == -1 || CO2 == -1) {
+  if (temperature == INVALID || 
+      humidity == INVALID || 
+      VOC == INVALID || 
+      CO2 == INVALID) {
     dataValid = FALSE;
     watchDogTimer.stop();
   }  else if (!dataValid) {  // Data just turned valid
     dataValid = TRUE;
+    Serial.printf("Data just turned valid\n\n");
     // digitalWrite(WDT_PBRSTN_PIN, LOW);  // Force watchdog to stop.
     watchDogTimer.start();              // Start watchdog keep-alive signal
   }
 
 
   // This is the fan control function call
-  fanControl(FAN_CTL_OUT_PIN, humidity, VOC, dataValid, &eveningRun);
-
-////////////////////////////////////////////////////////////////////////////
-//  relaySample is the voltage at the output of the relay, a direct analog for fan speed
-//  relayState is the condition of the relay; ground - dial control
-//  high - Argon control, mid - floating relay(bad)
-/////////////////////////////////////////////////////////////////////////////
-
-  relaySample = analogRead(RELAY_PIN);
-  relayState  = digitalRead(RELAY_STATE_PIN);
-
-/////////////////////////////////////////////////////////////////////////////
-//  The user has the option of running the fan in either manual mode or
-//  automatic mode.  The choice is determined by the position of a switch.  The 
-//  position of the switch can be read by the Argon
-//////////////////////////////////////////////////////////////////////////////
-
-  switchState = digitalRead(SWITCH_STATE_PIN);
-  wdtResetnIn = digitalRead(WDT_RSTN_PIN); 
+  fanSpeed = fanControl(dateTime, humidity, VOC, dataValid, &eveningRun);
 
 
 } // loop
@@ -258,15 +270,16 @@ void MQTT_connect(bool* valid) {
 ///////////////////////////////////////////////////////////////
 //          MQTT_PING
 //////////////////////////////////////////////////////////////
-bool MQTT_ping() {
+bool MQTT_ping(String dateTime) {
   static unsigned int last;
+  const int TWO_MINUTE_PING = 120000;
   bool pingStatus = FALSE;
 
-  if ((millis()-last)>120000) {
-      Serial.printf("Pinging MQTT \n");
+  if ((millis()-last)>TWO_MINUTE_PING) {
+      Serial.printf("Pinging MQTT at %s\n", dateTime.c_str());
       pingStatus = mqtt.ping();
       if(!pingStatus) {
-        Serial.printf("Disconnecting \n");
+        Serial.printf("Disconnecting at %s\n", dateTime.c_str());
         mqtt.disconnect();
       }
       last = millis();
@@ -277,7 +290,8 @@ bool MQTT_ping() {
 ///////////////////////////////////////////////////////////////
 //          MQTT_PUBLISH
 //////////////////////////////////////////////////////////////
-void MQTT_publish(int relaySample, int relayState, bool switchState, int VOC, bool dataValid, bool eveningRun) {
+void MQTT_publish(int relaySample, int relayState, int switchState, int VOC, 
+                  bool dataValid, bool eveningRun, int fanSpeed, String dateTime) {
     if(mqtt.Update()) {
       mqttObj1.publish(relaySample);
       mqttObj2.publish(relayState);
@@ -285,6 +299,8 @@ void MQTT_publish(int relaySample, int relayState, bool switchState, int VOC, bo
       mqttObj4.publish(VOC);
       mqttObj5.publish(dataValid);
       mqttObj6.publish(eveningRun);
+      mqttObj7.publish(fanSpeed);
+      mqttObj8.publish(dateTime);
   }
 }
 
@@ -324,23 +340,21 @@ void MQTT_subscribe(float* temp, int* hum, int* volit, int* carbon, bool* reseti
   //  are initialized to -1 to show they are invalid.  Once the MQTT broker
   //  is online, the data will be valid and fan control may begin.
   ////////////////////////////////////////////////////////////////////
-void fanControl(int FAN_CTL_OUT_PIN, int hum, int volit, bool dataValid, bool* eveningRun) {
+int fanControl(String dateTime, int hum, int volit, bool dataValid, bool* eveningRun) {
 
-  String    dateTime, timeOnly, hourOnly;   
+  String    timeOnly, hourOnly;   
   const int  FAN_OFF    = 0;   // 0.0 on manual fan dial
   const int  FAN_IDLE   = 65;  // 2.6 on manual fan dial
   const int  FAN_NORMAL = 90;  // 3.5 on manual fan dial
   const int  FAN_HIGH   = 200; // 8.0 on manual fan dial
 
-  const int VOC_HI_LIMIT      = 350;  // VOC limit above which the fan will turn on - from Clint Wolf's Code
-  const int HUMIDITY_LOW_LIMIT = 20;  //  Humidity limit to determine fan speed - from Clint Wolf's Code
-  static int debug=3, debugOld=0;
-  //  Setup TIME
-  Time.zone(-7);                                         //  Set time zone to MDT -6 from UTC
-  Particle.syncTime();
-  dateTime = Time.timeStr();                          //  get current value of date and time
-  timeOnly = dateTime.substring(11,16);               //  Extract value of time from dateTime
-  hourOnly = dateTime.substring(11,13);               //  Extract value of time from dateTime
+  const int VOC_HI_ON_LIMIT    = 350; // VOC limit above which the fan will turn on - from Clint Wolf's Code
+  const int VOC_LOW_OFF_LIMIT  = 320; // VOC limit below which the fan will turn off - from Clint Wolf's Code
+  const int HUMIDITY_LOW_LIMIT = 20;  // Humidity limit to determine fan speed - from Clint Wolf's Code
+  const int PWM_FREQ_50Kh = 50000;
+  static int fanSpeed=4, fanSpeedOld=0;
+  timeOnly = dateTime.substring(11,16); //  Extract value of time from dateTime
+  hourOnly = dateTime.substring(11,13); //  Extract value of time from dateTime
     // Serial.printf("Hour is: %s \n", hourOnly.c_str());
 
 
@@ -355,45 +369,50 @@ void fanControl(int FAN_CTL_OUT_PIN, int hum, int volit, bool dataValid, bool* e
   // Evening fan run to remove latent VOCs
   // Supercedes all other requirements
   if (hourOnly == "20" && !(*eveningRun)) {
-    analogWrite(FAN_CTL_OUT_PIN, FAN_HIGH);  
+    analogWrite(FAN_CTL_OUT_PIN, FAN_HIGH, PWM_FREQ_50Kh);  
     Serial.printf("Evening run started at %s \n", timeOnly.c_str());
+    fanSpeed = FAN_HIGH;
     *eveningRun = TRUE;
   } else if (hourOnly != "20" && *eveningRun) {
     analogWrite(FAN_CTL_OUT_PIN, FAN_OFF);  
     Serial.printf("Evening run ended at %s \n", timeOnly.c_str());
     *eveningRun = FALSE;
-  }
+    fanSpeed = FAN_OFF;
+ }
 
   // Fan is not running and VOC limit exceeded
   // - Inactive during evening run of fan
-  if (volit > VOC_HI_LIMIT && dataValid && !(*eveningRun)) {
+  if (volit > VOC_HI_ON_LIMIT && dataValid && !(*eveningRun)) {
     if (hum > HUMIDITY_LOW_LIMIT) {
-      analogWrite(FAN_CTL_OUT_PIN, FAN_NORMAL);  // Humidity is high so use higher fan speed
-      debug = 1;
+      analogWrite(FAN_CTL_OUT_PIN, FAN_NORMAL, PWM_FREQ_50Kh);  // Humidity is high so use higher fan speed
+      fanSpeed = FAN_NORMAL;
     } else {
-      analogWrite(FAN_CTL_OUT_PIN, FAN_IDLE);  // Humidity is low so use lower fan speed
-      debug = 2;
+      analogWrite(FAN_CTL_OUT_PIN, FAN_IDLE, PWM_FREQ_50Kh);  // Humidity is low so use lower fan speed
+      fanSpeed = FAN_IDLE;
     }
-  } else if (volit <= VOC_HI_LIMIT && !(*eveningRun)) {
+  } else if (volit <= VOC_LOW_OFF_LIMIT && !(*eveningRun)) {
     analogWrite(FAN_CTL_OUT_PIN, FAN_OFF);  // VOCs have dropped below threshold, turn fan off
-      debug = 3;
+      fanSpeed = FAN_OFF;
   }
 
-    if(debugOld != debug) {
-      debugOld = debug; 
-      switch (debug){
-        case 1:
-          Serial.printf("1. Fan Normal started at %s\nVOC: %i\nHumidity: %i\n\n", timeOnly.c_str(), volit, hum); 
+    if(fanSpeedOld != fanSpeed) {
+      fanSpeedOld = fanSpeed; 
+      switch (fanSpeed){
+        case FAN_HIGH:
+          Serial.printf("1. Fan High started at %s\nVOC: %i\nHumidity: %i\n\n", timeOnly.c_str(), volit, hum); 
           break;
-        case 2:
-          Serial.printf("2. Fan High started at %s\nVOC: %i\nHumidity: %i\n\n", timeOnly.c_str(), volit, hum); 
+        case FAN_NORMAL:
+          Serial.printf("2. Fan Normal started at %s\nVOC: %i\nHumidity: %i\n\n", timeOnly.c_str(), volit, hum); 
           break;
-        case 3:
-          Serial.printf("3. Fan Off at %s \nVOC: %i\nHumidity: %i\n\n", timeOnly.c_str(), volit, hum); 
+        case FAN_IDLE:
+          Serial.printf("3. Fan High started at %s\nVOC: %i\nHumidity: %i\n\n", timeOnly.c_str(), volit, hum); 
+          break;
+        case FAN_OFF:
+          Serial.printf("4. Fan Off at %s \nVOC: %i\nHumidity: %i\n\n", timeOnly.c_str(), volit, hum); 
           break;
         }
     }
-  
+  return fanSpeed;
 
 }
 
