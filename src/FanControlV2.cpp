@@ -352,7 +352,9 @@ int fanControl(String dateTime, int hum, int volit, bool dataValid, bool* evenin
   const int VOC_LOW_OFF_LIMIT  = 320; // VOC limit below which the fan will turn off - from Clint Wolf's Code
   const int HUMIDITY_LOW_LIMIT = 20;  // Humidity limit to determine fan speed - from Clint Wolf's Code
   const int PWM_FREQ_50Kh = 50000;
-  static int fanSpeed=4, fanSpeedOld=0;
+  const String EVENING_RUN_HOUR = "20";
+  static int fanSpeed=FAN_OFF;
+  static int fanSpeedOld=FAN_HIGH;
   timeOnly = dateTime.substring(11,16); //  Extract value of time from dateTime
   hourOnly = dateTime.substring(11,13); //  Extract value of time from dateTime
     // Serial.printf("Hour is: %s \n", hourOnly.c_str());
@@ -368,12 +370,12 @@ int fanControl(String dateTime, int hum, int volit, bool dataValid, bool* evenin
 
   // Evening fan run to remove latent VOCs
   // Supercedes all other requirements
-  if (hourOnly == "20" && !(*eveningRun)) {
+  if (hourOnly == EVENING_RUN_HOUR && !(*eveningRun)) {
     analogWrite(FAN_CTL_OUT_PIN, FAN_HIGH, PWM_FREQ_50Kh);  
     Serial.printf("Evening run started at %s \n", timeOnly.c_str());
     fanSpeed = FAN_HIGH;
     *eveningRun = TRUE;
-  } else if (hourOnly != "20" && *eveningRun) {
+  } else if (hourOnly != EVENING_RUN_HOUR && *eveningRun) {
     analogWrite(FAN_CTL_OUT_PIN, FAN_OFF);  
     Serial.printf("Evening run ended at %s \n", timeOnly.c_str());
     *eveningRun = FALSE;
