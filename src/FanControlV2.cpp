@@ -42,17 +42,18 @@ Adafruit_MQTT_Publish   mqttObj7 = Adafruit_MQTT_Publish  (&mqtt, AIO_USERNAME "
 Adafruit_MQTT_Publish   mqttObj8 = Adafruit_MQTT_Publish  (&mqtt, AIO_USERNAME "/feeds/signcompany-dateTime");
 
 
-// Adafruit_MQTT_Subscribe theTemperatureObject = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-temperature");
-// Adafruit_MQTT_Subscribe theHumidityObject    = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-humidity");
-// Adafruit_MQTT_Subscribe theTVOCObject        = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-tvoc");
-// Adafruit_MQTT_Subscribe theCO2Object         = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-eco2");
-// Adafruit_MQTT_Subscribe theResetObject       = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-reset");
+Adafruit_MQTT_Subscribe theTemperatureObject = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-temperature");
+Adafruit_MQTT_Subscribe theHumidityObject    = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-humidity");
+Adafruit_MQTT_Subscribe theTVOCObject        = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-tvoc");
+Adafruit_MQTT_Subscribe theCO2Object         = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-eco2");
+Adafruit_MQTT_Subscribe theResetObject       = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/nmmep.signcompany-reset");
 
-Adafruit_MQTT_Subscribe theTemperatureObject = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/test-temperature");
-Adafruit_MQTT_Subscribe theHumidityObject    = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/test-humidity");
-Adafruit_MQTT_Subscribe theTVOCObject        = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/test-tvoc");
-Adafruit_MQTT_Subscribe theCO2Object         = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/test-eco2");
-Adafruit_MQTT_Subscribe theResetObject       = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/test-reset");
+// Test code for injecting data
+// Adafruit_MQTT_Subscribe theTemperatureObject = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/test-temperature");
+// Adafruit_MQTT_Subscribe theHumidityObject    = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/test-humidity");
+// Adafruit_MQTT_Subscribe theTVOCObject        = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/test-tvoc");
+// Adafruit_MQTT_Subscribe theCO2Object         = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/test-eco2");
+// Adafruit_MQTT_Subscribe theResetObject       = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/test-reset");
 
 
 /************Declare Variables*************/
@@ -126,6 +127,13 @@ Timer watchDogTimer(WDT_Half_Time, watchDogISR);  //  Instantiate a Timer interr
 void setup() {
   Serial.begin(9600);
   waitFor(Serial.isConnected, 15000); //wait for Serial Monitor to startup
+
+WiFi.on();
+WiFi.clearCredentials();
+WiFi.setCredentials("DDCIOT", "ddcIOT2020");
+WiFi.connect();
+while(WiFi.connecting()) Serial.print(".-");
+    
 
   pinMode(WDT_ST_PIN,      OUTPUT);
   pinMode(WDT_PBRSTN_PIN,  OUTPUT);
