@@ -3,6 +3,7 @@
  * Description:  FailSafe controller for exhaust fan at Century Signs
  * Author:       Reed Searle
  * Date:         15 January 2024
+ * Last Modified: 7 March 2024
  */
 
 // Include Particle Device OS APIs
@@ -67,7 +68,7 @@ const int SWITCH_STATE_PIN = A2; // State of the relay; Manual, Auto, Floating
 
 const int WDT_ST_PIN       = D0; // Watchdog timer strobe output on Pin A1
 const int WDT_RSTN_PIN     = D1; // Reset(low) from the DS1232. Used for instrumentation
-const int TPL5010_WAKE_PIN = D2; // Wake pin from tpl5010
+const int TPL5010_WAKE_PIN = D2; // Wake pin from tpl5010 - NOT USED in this implementation
 const int TPL5010_DONE_PIN = D3; // Done pin to tpl5010
 const int FAN_CTL_OUT_PIN  = D4; // Fan control output pin to OpAmp
 const int D7_LED_PIN       = D7; // Onboard LED
@@ -75,17 +76,6 @@ const int WDT_PBRSTN_PIN   = D9; // Reset(low) to the  DS1232. Used to control r
 
 const int WDT_Half_Time    = 250;//  Half time pulse for WDT.  Used to change the state ot the WDT Strobe output
 bool      WDT_ST_State;          //  State of the watchdog timer strobe output
-
-const int  FAN_OFF    = 0;   // 0.0 on manual fan dial
-const int  FAN_IDLE   = 65;  // 2.6 on manual fan dial
-const int  FAN_NORMAL = 90;  // 3.5 on manual fan dial
-const int  FAN_HIGH   = 200; // 8.0 on manual fan dial
-long startFanTest;
-const long FAN_TEST_DELAY = 5000;
-int fanTest[] = {FAN_OFF, FAN_IDLE, FAN_NORMAL,FAN_HIGH};
-int fanCount;
-
-bool firstRead;  //  indicator of the first time the subscription has been read since the device turned on
 
 float temperature = INVALID; // temperature variable set to Invalid Data
 int   humidity    = INVALID; // humidity variable set to Invalid Data
@@ -96,7 +86,7 @@ bool dataValid;   //  Flag for MQTT subscription data receiving on all four subs
 bool eveningRun;  //  Flag for nightly high speed fan
 
 //  Time & timing Variables
-u_int64_t last, lastTime;  // These timing variables work with System.millis()
+u_int64_t lastDay, lastTime;  // These timing variables work with System.millis()
 String    dateTime;   
 
 //  Sample Variables
@@ -105,6 +95,7 @@ int relayState;   //  Currrent state of the relay; manual, auto, or floating(BAD
 int switchState;  //  Current selected position of the manual/automatic switch;
 int wdtResetnIn;  //  Current reset state of the Watch Dog Timer, DS1232 ACTIVE LOW
 bool resetMQTT;   // Forced reset from dashboard through MQTT broker
+bool resetMQTT_old; // time delayed value of resetMQTT
 int fanSpeed;     // Integer value of fan speed sent to MQTT
 
 //  INSTANTIATIONS  //
@@ -129,8 +120,6 @@ void setup() {
   waitFor(Serial.isConnected, 15000); //wait for Serial Monitor to startup
 
 WiFi.on();
-WiFi.clearCredentials();
-WiFi.setCredentials("DDCIOT", "ddcIOT2020");
 WiFi.connect();
 while(WiFi.connecting()) Serial.print(".-");
     
@@ -176,13 +165,15 @@ while(WiFi.connecting()) Serial.print(".-");
   dataValid  = FALSE;  //  Initialize dataValid flag to FALSE
   eveningRun = FALSE;  //  Initialize eveningRun flag to FALSE
 
+  resetMQTT_old = resetMQTT; // force a non-triggerred condition
+
   //  Setup TIME
   Particle.connect();
   Time.zone(-6);   //  Set time zone to MST -6 from UTC
   Particle.syncTime();
 
   watchDogTimer.start();
-  last     = millis();
+  lastDay     = millis();
   lastTime = millis();
 
 } // setup
@@ -193,8 +184,9 @@ while(WiFi.connecting()) Serial.print(".-");
 /////////////////////////////////////////////////////////
 void loop() {
   //  Sync TIME once per day
-  if((millis() - last) > MILLIS_PER_DAY) {
+  if((millis() - lastDay) > MILLIS_PER_DAY) {
     Particle.syncTime();
+    lastDay = millis();
   }
   dateTime = Time.timeStr();                          //  get current value of date and time
 
@@ -206,7 +198,7 @@ void loop() {
   switchState = analogRead(SWITCH_STATE_PIN);
   relayState  = analogRead(RELAY_STATE_PIN);
   relaySample = analogRead(RELAY_PIN);
-  wdtResetnIn = digitalRead(WDT_RSTN_PIN); 
+  wdtResetnIn = digitalRead(WDT_RSTN_PIN); //Placeholder until remote reset implemented
 
   /*  MQTT Function Block*/
 // Validate connected to MQTT Broker
@@ -236,6 +228,13 @@ void loop() {
     // digitalWrite(WDT_PBRSTN_PIN, LOW);  // Force watchdog to stop.
     watchDogTimer.start();              // Start watchdog keep-alive signal
   }
+
+  // RESET from MQTT - NOT IMPLEMENTED
+  // if (resetMQTT && !resetMQTT_old){
+  //   System.reset();
+  // } else {
+  //   resetMQTT_old = resetMQTT;
+  // }
 
 
   // This is the fan control function call
