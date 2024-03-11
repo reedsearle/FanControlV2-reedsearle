@@ -15,8 +15,8 @@
 
 
 // Let Device OS manage the connection to the Particle Cloud
-SYSTEM_MODE(AUTOMATIC);
-// SYSTEM_MODE(MANUAL);// for testing at home
+// SYSTEM_MODE(AUTOMATIC);
+SYSTEM_MODE(MANUAL);// for testing at home
 
 // Run the application and system concurrently in separate threads
 SYSTEM_THREAD(ENABLED);
@@ -119,11 +119,6 @@ void setup() {
   Serial.begin(9600);
   waitFor(Serial.isConnected, 15000); //wait for Serial Monitor to startup
 
-WiFi.on();
-WiFi.connect();
-while(WiFi.connecting()) Serial.print(".-");
-    
-
   pinMode(WDT_ST_PIN,      OUTPUT);
   pinMode(WDT_PBRSTN_PIN,  OUTPUT);
   pinMode(WDT_RSTN_PIN,    INPUT);
@@ -147,12 +142,12 @@ while(WiFi.connecting()) Serial.print(".-");
 
  
   // Connect to WiFi without going to Particle Cloud
-  // WiFi.on();
-  // WiFi.clearCredentials();
-  // WiFi.setCredentials("CNM_GUEST");
+  WiFi.on();
+  WiFi.clearCredentials();
+  WiFi.setCredentials("CSBWifi", "CSB2117!");
   WiFi.connect();
   while(WiFi.connecting()) {
-    Serial.printf(".");
+    Serial.printf(".-");
   }
 
   // Setup MQTT subscription Century Signs Environmental Data.
