@@ -118,6 +118,15 @@ Timer watchDogTimer(WDT_Half_Time, watchDogISR);  //  Instantiate a Timer interr
 void setup() {
   Serial.begin(9600);
   waitFor(Serial.isConnected, 15000); //wait for Serial Monitor to startup
+  // Connect to WiFi without going to Particle Cloud
+  WiFi.on();
+  WiFi.clearCredentials();
+  WiFi.setCredentials("CSBWifi", "CSB2117!");
+  WiFi.connect();
+  while(WiFi.connecting()) {
+    Serial.printf(".-");
+  }
+
 
   pinMode(WDT_ST_PIN,      OUTPUT);
   pinMode(WDT_PBRSTN_PIN,  OUTPUT);
@@ -141,15 +150,6 @@ void setup() {
   watchDogTimer.stop();
 
  
-  // Connect to WiFi without going to Particle Cloud
-  WiFi.on();
-  WiFi.clearCredentials();
-  WiFi.setCredentials("CSBWifi", "CSB2117!");
-  WiFi.connect();
-  while(WiFi.connecting()) {
-    Serial.printf(".-");
-  }
-
   // Setup MQTT subscription Century Signs Environmental Data.
   mqtt.subscribe(&theTemperatureObject);
   mqtt.subscribe(&theHumidityObject);
@@ -168,8 +168,8 @@ void setup() {
   Particle.syncTime();
 
   watchDogTimer.start();
-  lastDay     = millis();
-  lastTime = millis();
+  lastDay     = System.millis();
+  lastTime = System.millis();
 
 } // setup
 
@@ -179,9 +179,9 @@ void setup() {
 /////////////////////////////////////////////////////////
 void loop() {
   //  Sync TIME once per day
-  if((millis() - lastDay) > MILLIS_PER_DAY) {
+  if((System.millis() - lastDay) > MILLIS_PER_DAY) {
     Particle.syncTime();
-    lastDay = millis();
+    lastDay = System.millis();
   }
   dateTime = Time.timeStr();                          //  get current value of date and time
 
@@ -203,7 +203,7 @@ void loop() {
   // publish to cloud every 30 seconds
   if((System.millis()-lastTime > PUBLISH_TIME)) {
     MQTT_publish(relaySample, relayState, switchState, VOC, dataValid, eveningRun, fanSpeed, dateTime);
-    lastTime = millis();
+    lastTime = System.millis();
   }
 
   // this is our 'wait for incoming subscription packets' busy subloop
@@ -277,14 +277,14 @@ bool MQTT_ping(String dateTime) {
   const int TWO_MINUTE_PING = 120000;
   bool pingStatus = FALSE;
 
-  if ((millis()-last)>TWO_MINUTE_PING) {
+  if ((System.millis()-last)>TWO_MINUTE_PING) {
       Serial.printf("Pinging MQTT at %s\n", dateTime.c_str());
       pingStatus = mqtt.ping();
       if(!pingStatus) {
         Serial.printf("Disconnecting at %s\n", dateTime.c_str());
         mqtt.disconnect();
       }
-      last = millis();
+      last = System.millis();
   }
   return pingStatus;
 }
