@@ -294,6 +294,7 @@ bool MQTT_ping(String dateTime) {
 //////////////////////////////////////////////////////////////
 void MQTT_publish(int relaySample, int relayState, int switchState, int VOC, 
                   bool dataValid, bool eveningRun, int fanSpeed, String dateTime) {
+    Particle.publish("Starting MQTT Publish");
     if(mqtt.Update()) {
       mqttObj1.publish(relaySample);
       mqttObj2.publish(relayState);
@@ -303,6 +304,7 @@ void MQTT_publish(int relaySample, int relayState, int switchState, int VOC,
       mqttObj6.publish(eveningRun);
       mqttObj7.publish(fanSpeed);
       mqttObj8.publish(dateTime);
+      Particle.publish("Finished MQTT Publish");
   }
 }
 
