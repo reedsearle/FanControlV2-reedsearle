@@ -86,7 +86,7 @@ bool dataValid;   //  Flag for MQTT subscription data receiving on all four subs
 bool eveningRun;  //  Flag for nightly high speed fan
 
 //  Time & timing Variables
-u_int64_t lastDay, lastTime;  // These timing variables work with System.millis()
+unsigned long long lastDay, lastTime;  // These timing variables work with System.millis()
 String    dateTime;   
 
 //  Sample Variables
