@@ -86,7 +86,7 @@ bool dataValid;   //  Flag for MQTT subscription data receiving on all four subs
 bool eveningRun;  //  Flag for nightly high speed fan
 
 //  Time & timing Variables
-unsigned long long lastDay, lastTime;  // These timing variables work with System.millis()
+unsigned long lastDay, lastTime;  // These timing variables work with System.millis()
 String    dateTime;   
 
 //  Sample Variables
@@ -168,8 +168,8 @@ void setup() {
   Particle.syncTime();
 
   watchDogTimer.start();
-  lastDay     = System.millis();
-  lastTime = System.millis();
+  lastDay     = millis();
+  lastTime = millis();
 
 } // setup
 
@@ -179,9 +179,9 @@ void setup() {
 /////////////////////////////////////////////////////////
 void loop() {
   //  Sync TIME once per day
-  if((System.millis() - lastDay) > MILLIS_PER_DAY) {
+  if((millis() - lastDay) > MILLIS_PER_DAY) {
     Particle.syncTime();
-    lastDay = System.millis();
+    lastDay = millis();
   }
   dateTime = Time.timeStr();                          //  get current value of date and time
 
@@ -201,9 +201,9 @@ void loop() {
   MQTT_ping(dateTime);
 
   // publish to cloud every 30 seconds
-  if((System.millis()-lastTime > PUBLISH_TIME)) {
+  if((millis()-lastTime > PUBLISH_TIME)) {
     MQTT_publish(relaySample, relayState, switchState, VOC, dataValid, eveningRun, fanSpeed, dateTime);
-    lastTime = System.millis();
+    lastTime = millis();
   }
 
   // this is our 'wait for incoming subscription packets' busy subloop
@@ -277,14 +277,14 @@ bool MQTT_ping(String dateTime) {
   const int TWO_MINUTE_PING = 120000;
   bool pingStatus = FALSE;
 
-  if ((System.millis()-last)>TWO_MINUTE_PING) {
+  if ((millis()-last)>TWO_MINUTE_PING) {
       Serial.printf("Pinging MQTT at %s\n", dateTime.c_str());
       pingStatus = mqtt.ping();
       if(!pingStatus) {
         Serial.printf("Disconnecting at %s\n", dateTime.c_str());
         mqtt.disconnect();
       }
-      last = System.millis();
+      last = millis();
   }
   return pingStatus;
 }
